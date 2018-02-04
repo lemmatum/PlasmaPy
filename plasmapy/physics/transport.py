@@ -226,24 +226,10 @@ def _boilerPlate(T, particles, V):
                          "list or tuple containing representations of two  "
                          f"charged particles. Got {particles} instead.")
 
-    masses = np.zeros(2) * u.kg
-    charges = np.zeros(2) * u.C
+    particles = [Particle(i) for i in particles]
+    charges = u.Quantity([abs(p.charge) for p in particles])
+    masses = u.Quantity([p.mass for p in particles])
 
-    for particle, i in zip(particles, range(2)):
-
-        try:
-            masses[i] = ion_mass(particles[i])
-        except Exception:
-            raise ValueError("Unable to find mass of particle: "
-                             f"{particles[i]}.")
-        try:
-            charges[i] = np.abs(e * integer_charge(particles[i]))
-            if charges[i] is None:
-                raise ValueError("Unable to find charge of particle: "
-                                 f"{particles[i]}.")
-        except Exception:
-            raise ValueError("Unable to find charge of particle: "
-                             f"{particles[i]}.")
     # obtaining reduced mass of 2 particle collision system
     reduced_mass = masses[0] * masses[1] / (masses[0] + masses[1])
     # getting thermal velocity of system if no velocity is given

@@ -7,7 +7,8 @@ import pytest
 from astropy import units as u
 from plasmapy.atomic.atomic import ion_mass, integer_charge
 from plasmapy.utils.exceptions import (PhysicsError, PhysicsWarning,
-                                       RelativityWarning, RelativityError)
+                                       RelativityWarning, RelativityError,
+                                        InvalidParticleError)
 from plasmapy.physics.parameters import Hall_parameter
 from ...constants import c, m_p, m_e, e, mu0
 
@@ -181,12 +182,13 @@ class Test_Coulomb_logarithm(object):
         """
         with pytest.raises(ValueError):
             Coulomb_logarithm(1 * u.K, 5 * u.m**-3, ('e'))
+
     def test_invalid_particle_error(self):
         """
         Tests whether an error is raised when an invalid particle name
         is given.
         """
-        with pytest.raises(ValueError):
+        with pytest.raises(InvalidParticleError):
             Coulomb_logarithm(1 * u.K, 5 * u.m**-3, ('e', 'g'))
 
 
