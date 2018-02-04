@@ -231,7 +231,7 @@ def _boilerPlate(T, particles, V):
     masses = u.Quantity([p.mass for p in particles])
 
     # obtaining reduced mass of 2 particle collision system
-    reduced_mass = masses[0] * masses[1] / (masses[0] + masses[1])
+    reduced_mass = particles[0].reduced_mass(particles[1])
     # getting thermal velocity of system if no velocity is given
     if np.isnan(V):
         V = np.sqrt(2 * k_B * T / reduced_mass).to(u.m/u.s)
