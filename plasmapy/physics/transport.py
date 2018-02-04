@@ -14,7 +14,7 @@ from plasmapy import utils
 from plasmapy.utils.checks import check_quantity, check_relativistic, _check_relativistic
 from plasmapy.utils.exceptions import PhysicsError, PhysicsWarning
 from plasmapy.constants import (m_p, m_e, c, mu0, k_B, e, eps0, pi, h, hbar)
-from ..atomic import (ion_mass, integer_charge)
+from ..atomic import (ion_mass, integer_charge, Particle)
 from plasmapy.atomic.atomic import _is_electron
 from .parameters import (Debye_length, Hall_parameter,
                          collision_rate_electron_ion, collision_rate_ion_ion)
@@ -1693,7 +1693,7 @@ def _nondim_thermal_conductivity(hall, Z,
     type of particle (electron or ion) is input. Non-electrons are assumed to
     be ions.
     """
-    if _is_electron(particle):
+    if Particle(particle).particle=='e-':
         if model == 'spitzer-harm' or model == 'spitzer':
             kappa_hat = _nondim_tc_e_spitzer(Z)
         elif model == 'braginskii':
@@ -1733,7 +1733,7 @@ def _nondim_viscosity(hall,
     be ions.
     """
 
-    if _is_electron(particle):
+    if Particle(particle).particle=='e-':
         if model == 'braginskii':
             eta_hat = _nondim_visc_e_braginskii(hall, Z)
         elif model == 'ji-held':
