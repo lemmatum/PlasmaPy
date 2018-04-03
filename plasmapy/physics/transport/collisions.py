@@ -7,11 +7,11 @@ import numpy as np
 import warnings
 
 # plasmapy modules
-import plasmapy.atomic as atomic
-from plasmapy import utils
+from plasmapy import utils, atomic
+from plasmapy.physics import gyrofrequency
 from plasmapy.utils.checks import (check_quantity,
                                    _check_relativistic)
-from plasmapy.constants import (m_e, k_B, e, eps0, pi, hbar)
+from plasmapy.constants import (m_e, k_B, e, eps0, pi, hbar, c)
 from plasmapy.atomic import (ion_mass, integer_charge)
 from plasmapy.physics.parameters import (Debye_length)
 from plasmapy.physics.quantum import (Wigner_Seitz_radius,
@@ -1311,3 +1311,287 @@ def coupling_parameter(T,
                              "Something went horribly wrong.")
     coupling = coulombEnergy / kineticEnergy
     return coupling.to(u.dimensionless_unscaled)
+
+
+@utils.check_quantity({
+    'T_e': {'units': u.K, 'can_be_negative': False},
+    'n_e': {'units': u.m ** -3, 'can_be_negative': False}
+    })
+def collision_rate_electron_ion(T_e,
+                                n_e,
+                                ion_particle,
+                                coulomb_log=None,
+                                V=None,
+                                coulomb_log_method="classical"):
+    r"""
+    Momentum relaxation electron-ion collision rate
+
+    From [3]_, equations (2.17) and (2.120)
+
+    Considering a Maxwellian distribution of "test" electrons colliding with
+    a Maxwellian distribution of "field" ions.
+
+    This result is an electron momentum relaxation rate, and is used in many
+    classical transport expressions. It is equivalent to:
+    * 1/tau_e from ref [1]_ eqn (1) pp. #,
+    * 1/tau_e from ref [2]_ eqn (1) pp. #,
+    * nu_e\i_S from ref [2]_ eqn (1) pp. #,
+
+    Parameters
+    ----------
+    T_e : ~astropy.units.Quantity
+        The electron temperature of the Maxwellian test electrons
+
+    n_e : ~astropy.units.Quantity
+        The number density of the Maxwellian test electrons
+
+    ion_particle: str
+        String signifying a particle type of the field ions, including charge
+        state information.
+
+    V : ~astropy.units.Quantity, optional
+        The relative velocity between particles.  If not provided,
+        thermal velocity is assumed: :math:`\mu V^2 \sim 2 k_B T`
+        where `mu` is the reduced mass.
+
+    coulomb_log : float or dimensionless ~astropy.units.Quantity, optional
+        Option to specify a Coulomb logarithm of the electrons on the ions.
+        If not specified, the Coulomb log will is calculated using the
+        `~plasmapy.physics.transport.Coulomb_logarithm` function.
+
+    coulomb_log_method : string, optional
+        Method used for Coulomb logarithm calculation (see that function
+        for more documentation). Choose from "classical" or "GMS-1" to "GMS-6".
+
+    References
+    ----------
+    .. [1] Braginskii
+
+    .. [2] Formulary
+
+    .. [3] Callen Chapter 2, http://homepages.cae.wisc.edu/~callen/chap2.pdf
+
+    Examples
+    --------
+    >>> from astropy import units as u
+    >>> collision_rate_electron_ion(0.1*u.eV, 1e6/u.m**3, 'p')
+    <Quantity 0.00180172 1 / s>
+    >>> collision_rate_electron_ion(100*u.eV, 1e6/u.m**3, 'p')
+    <Quantity 8.6204672e-08 1 / s>
+    >>> collision_rate_electron_ion(100*u.eV, 1e20/u.m**3, 'p')
+    <Quantity 3936037.8595928 1 / s>
+    >>> collision_rate_electron_ion(100*u.eV, 1e20/u.m**3, 'p', coulomb_log_method = 'GMS-1')
+    <Quantity 3872922.52743562 1 / s>
+    >>> collision_rate_electron_ion(0.1*u.eV, 1e6/u.m**3, 'p', V = c/100)
+    <Quantity 4.41166015e-07 1 / s>
+    >>> collision_rate_electron_ion(100*u.eV, 1e20/u.m**3, 'p', coulomb_log = 20)
+    <Quantity 5812633.74935004 1 / s>
+
+    """
+    T_e = T_e.to(u.K, equivalencies=u.temperature_energy())
+    if V is None:
+        # electron thermal velocity (most probable)
+        V = np.sqrt(2 * k_B * T_e / m_e)
+
+    particles = [ion_particle, 'e-']
+    Z_i = atomic.integer_charge(ion_particle)
+    nu = collision_frequency(T_e,
+                             n_e,
+                             particles,
+                             z_mean=Z_i,
+                             V=V,
+                             method=coulomb_log_method
+                             )
+    coeff = 4 / np.sqrt(np.pi) / 3
+
+
+    # accounting for when a Coulomb logarithm value is passed
+    if coulomb_log is not None:
+        cLog = Coulomb_logarithm(T_e,
+                                 n_e,
+                                 particles,
+                                 z_mean=Z_i,
+                                 V=V, # probably needs to be enabled!
+                                 method=coulomb_log_method)
+        # dividing out by typical Coulomb logarithm value implicit in
+        # the collision frequency calculation and replacing with
+        # the user defined Coulomb logarithm value
+        nu_mod = nu * coulomb_log / cLog
+        nu_e = coeff * nu_mod
+    else:
+        nu_e = coeff * nu
+    return nu_e.to(1 / u.s)
+
+
+@utils.check_quantity({
+    'T_i': {'units': u.K, 'can_be_negative': False},
+    'n_i': {'units': u.m ** -3, 'can_be_negative': False}
+    })
+def collision_rate_ion_ion(T_i,
+                           n_i,
+                           ion_particle,
+                           coulomb_log=None,
+                           V=None,
+                           coulomb_log_method="classical"):
+    r"""
+    Momentum relaxation ion-ion collision rate
+
+    From [3]_, equations (2.36) and (2.122)
+
+    Considering a Maxwellian distribution of "test" ions colliding with
+    a Maxwellian distribution of "field" ions.
+
+    Note, it is assumed that electrons are present in such numbers as to
+    establish quasineutrality, but the effects of the test ions colliding
+    with them are not considered here.
+
+    This result is an ion momentum relaxation rate, and is used in many
+    classical transport expressions. It is equivalent to:
+    * 1/tau_i from ref [1]_ eqn (1) pp. #,
+    * 1/tau_i from ref [2]_ eqn (1) pp. #,
+    * nu_i\i_S from ref [2]_ eqn (1) pp. #,
+
+    Parameters
+    ----------
+    T_i : ~astropy.units.Quantity
+        The electron temperature of the Maxwellian test ions
+
+    n_i : ~astropy.units.Quantity
+        The number density of the Maxwellian test ions
+
+    ion_particle: str
+        String signifying a particle type of the test and field ions,
+        including charge state information. This function assumes the test
+        and field ions are the same species.
+
+    V : ~astropy.units.Quantity, optional
+        The relative velocity between particles.  If not provided,
+        thermal velocity is assumed: :math:`\mu V^2 \sim 2 k_B T`
+        where `mu` is the reduced mass.
+
+    coulomb_log : float or dimensionless ~astropy.units.Quantity, optional
+        Option to specify a Coulomb logarithm of the electrons on the ions.
+        If not specified, the Coulomb log will is calculated using the
+        ~plasmapy.physics.transport.Coulomb_logarithm function.
+
+    coulomb_log_method : string, optional
+        Method used for Coulomb logarithm calculation (see that function
+        for more documentation). Choose from "classical" or "GMS-1" to "GMS-6".
+
+    References
+    ----------
+    .. [1] Braginskii
+
+    .. [2] Formulary
+
+    .. [3] Callen Chapter 2, http://homepages.cae.wisc.edu/~callen/chap2.pdf
+
+    Examples
+    --------
+    >>> from astropy import units as u
+    >>> collision_rate_ion_ion(0.1*u.eV, 1e6/u.m**3, 'p')
+    <Quantity 2.97315582e-05 1 / s>
+    >>> collision_rate_ion_ion(100*u.eV, 1e6/u.m**3, 'p')
+    <Quantity 1.43713193e-09 1 / s>
+    >>> collision_rate_ion_ion(100*u.eV, 1e20/u.m**3, 'p')
+    <Quantity 66411.80316364 1 / s>
+    >>> collision_rate_ion_ion(100*u.eV, 1e20/u.m**3, 'p', coulomb_log_method='GMS-1')
+    <Quantity 66407.00859126 1 / s>
+    >>> collision_rate_ion_ion(100*u.eV, 1e20/u.m**3, 'p', V = c/100)
+    <Quantity 6.53577473 1 / s>
+    >>> collision_rate_ion_ion(100*u.eV, 1e20/u.m**3, 'p', coulomb_log=20)
+    <Quantity 95918.76240877 1 / s>
+
+    """
+    T_i = T_i.to(u.K, equivalencies=u.temperature_energy())
+    m_i = atomic.ion_mass(ion_particle)
+    particles = [ion_particle, ion_particle]
+    if V is None:
+        # ion thermal velocity (most probable)
+        V = np.sqrt(2 * k_B * T_i / m_i)
+    Z_i = atomic.integer_charge(ion_particle)
+    nu = collision_frequency(T_i,
+                             n_i,
+                             particles,
+                             z_mean=Z_i,
+                             V=V,
+                             method=coulomb_log_method)
+    # factor of 4 due to reduced mass in bperp and the rest is
+    # due to differences in definitions of collisional frequency
+    coeff = np.sqrt(8 / np.pi) / 3 / 4
+
+    # accounting for when a Coulomb logarithm value is passed
+    if coulomb_log is not None:
+        cLog = Coulomb_logarithm(T_i,
+                                 n_i,
+                                 particles,
+                                 z_mean=Z_i,
+                                 V=np.nan * u.m / u.s,
+                                 method=coulomb_log_method)
+        # dividing out by typical Coulomb logarithm value implicit in
+        # the collision frequency calculation and replacing with
+        # the user defined Coulomb logarithm value
+        nu_mod = nu * coulomb_log / cLog
+        nu_i = coeff * nu_mod
+    else:
+        nu_i = coeff * nu
+    return nu_i.to(1 / u.s)
+
+
+@utils.check_quantity({
+    'n': {'units': u.m ** -3, 'can_be_negative': False},
+    'T': {'units': u.K, 'can_be_negative': False},
+    'B': {'units': u.T}
+    })
+def Hall_parameter(n,
+                   T,
+                   B,
+                   ion_particle,
+                   particle='e-',
+                   coulomb_log=None,
+                   V=None,
+                   coulomb_log_method="classical"):
+    r"""Calculate the ratio between the `particle` gyrofrequency and the
+    `particle-`ion_particle` collision rate.
+
+    Parameters
+    ----------
+    n : ~astropy.units.quantity.Quantity
+        The density of `particle`s
+    T : ~astropy.units.quantity.Quantity
+        The temperature of `particle`s
+    B : ~astropy.units.quantity.Quantity
+        The magnetic field
+    ion_particle : str
+        String signifying the type of ion.
+    particle : str, optional
+        String signifying the type of `particle`s. Defaults to electrons.
+    coulomb_log : float, optional
+        Preset value for the Coulomb logarithm. Used mostly for testing purposes.
+    V : The relative velocity between `particle`s and `ion_particle`s.
+    coulomb_log_method : str, optional
+        Method used for Coulomb logarithm calculation. Refer to its documentation.
+
+    See Also
+    --------
+    plasmapy.physics.parameters.gyrofrequency
+    plasmapy.physics.parameters.collision_rate_electron_ion
+    plasmapy.physics.transport.Coulomb_logarithm
+
+    Returns
+    -------
+    astropy.units.quantity.Quantity
+    """
+
+    gyro_frequency = gyrofrequency(B, particle)
+    gyro_frequency = gyro_frequency / u.radian
+    if atomic.Particle(particle).particle == 'e-':
+        coll_rate = collision_rate_electron_ion(T,
+                                                n,
+                                                ion_particle,
+                                                coulomb_log,
+                                                V,
+                                                coulomb_log_method=coulomb_log_method)
+    else:
+        coll_rate = collision_rate_ion_ion(T, n, ion_particle, coulomb_log, V)
+    return gyro_frequency / coll_rate

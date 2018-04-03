@@ -8,12 +8,13 @@ from astropy import units as u
 from plasmapy import utils
 from plasmapy import atomic
 from plasmapy.atomic.atomic import _is_electron
-from .collisions import Coulomb_logarithm
-from plasmapy.physics.parameters import (Hall_parameter,
-                                         collision_rate_electron_ion,
-                                         collision_rate_ion_ion,
-                                         grab_charge)
-from plasmapy.constants import e, m_e, k_B
+from .collisions import (Coulomb_logarithm,
+                         Hall_parameter,
+                         collision_rate_electron_ion,
+                         collision_rate_ion_ion,
+    )
+from plasmapy.physics.parameters import grab_charge
+from plasmapy.constants import e, m_e, k_B, c
 
 
 class classical_transport:

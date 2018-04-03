@@ -8,11 +8,12 @@ from plasmapy.atomic.atomic import ion_mass, integer_charge
 from astropy.tests.helper import assert_quantity_allclose
 from plasmapy.utils.exceptions import (PhysicsError, PhysicsWarning,
                                        InvalidParticleError)
-from plasmapy.physics.parameters import Hall_parameter
 from plasmapy.constants import m_p, m_e
 
-from plasmapy.physics.transport.collisions import (Coulomb_logarithm,
-                                                   )
+from plasmapy.physics.transport.collisions import (
+    Coulomb_logarithm,
+    Hall_parameter,
+    )
 from plasmapy.physics.transport.braginskii import (_nondim_thermal_conductivity,
                                                    _nondim_viscosity,
                                                    _nondim_resistivity,
