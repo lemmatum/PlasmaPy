@@ -4,10 +4,12 @@ __all__ = [
     "cold_plasma_permittivity_SDP",
     "cold_plasma_permittivity_LRP",
     "permittivity_1D_Maxwellian",
+    "permittivity_1D_generalized",
     "RotatingTensorElements",
     "StixTensorElements",
 ]
-__lite_funcs__ = ["permittivity_1D_Maxwellian_lite"]
+__lite_funcs__ = ["permittivity_1D_Maxwellian_lite",
+                  "permittivity_1D_generalized_lite"]
 
 from collections import namedtuple
 from collections.abc import Sequence
@@ -15,7 +17,8 @@ from collections.abc import Sequence
 import astropy.units as u
 import numpy as np
 
-from plasmapy.dispersion.dispersion_functions import plasma_dispersion_func_deriv
+from plasmapy.dispersion.dispersion_functions import (plasma_dispersion_func_deriv,
+                                                      plasma_dispersion_1D_dist_deriv)
 from plasmapy.formulary.frequencies import gyrofrequency, plasma_frequency
 from plasmapy.formulary.speeds import thermal_speed
 from plasmapy.particles.particle_class import ParticleLike
@@ -398,6 +401,179 @@ def permittivity_1D_Maxwellian(
     wp = plasma_frequency(n=n, particle=particle, Z=z_mean).value
 
     chi = permittivity_1D_Maxwellian_lite(
+        omega.value,
+        kWave.value,
+        vth,
+        wp,
+    )
+    return chi * u.dimensionless_unscaled
+
+
+@preserve_signature
+def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
+    r"""
+    The :term:`lite-function` for
+    `~plasmapy.formulary.dielectric.permittivity_1D_generalized`.
+    Performs the same calculations as
+    `~plasmapy.formulary.dielectric.permittivity_1D_generalized`, but is
+    intended for computational use and, thus, has data conditioning
+    safeguards removed.
+
+    Parameters
+    ----------
+    omega : |array_like| of real positive values
+        The frequency, in rad/s, of the electromagnetic wave propagating
+        through the plasma.
+
+    kWave : |array_like| of real values
+        The corresponding wavenumber, in rad/m, of the electromagnetic
+        wave propagating through the plasma.
+
+    vth : `float`
+        The 3D, most probable thermal speed, in m/s. (i.e. it includes
+        the factor of :math:`\sqrt{2}`, see
+        :ref:`thermal speed notes <thermal-speed-notes>`)
+
+    wp : `float`
+        The plasma frequency, in rad/s.
+
+    Returns
+    -------
+    chi : |array_like| of complex values
+        The ion or the electron dielectric permittivity of the plasma.
+        This is a dimensionless quantity.
+
+    See Also
+    --------
+    ~plasmapy.formulary.dielectric.permittivity_1D_generalized
+
+    Examples
+    --------
+    >>> import astropy.units as u
+    >>> from plasmapy.formulary import thermal_speed, plasma_frequency
+    >>> T = 30 * u.eV
+    >>> n = 1e18 * u.cm**-3
+    >>> particle = "Ne"
+    >>> Z = 8
+    >>> omega = 3.541e15  # in rad/s
+    >>> vth = thermal_speed(T=T, particle=particle).value
+    >>> wp = plasma_frequency(n=n, particle=particle, Z=Z).value
+    >>> k_wave = omega / vth
+    >>> permittivity_1D_generalized_lite(omega, k_wave, vth=vth, wp=wp)
+    np.complex128(-6.72794...e-08+5.76024...e-07j)
+    """
+
+    # scattering parameter alpha.
+    # explicitly removing factor of sqrt(2) to be consistent with Froula
+    alpha = np.sqrt(2) * wp / (kWave * vth)
+    # The dimensionless phase velocity of the propagating EM wave.
+    zeta = omega / (kWave * vth)
+    return -0.5 * (alpha**2) * plasma_dispersion_1D_dist_deriv(zeta)
+
+
+@bind_lite_func(permittivity_1D_generalized_lite)
+@validate_quantities(
+    kWave={"none_shall_pass": True}, validations_on_return={"can_be_complex": True}
+)
+def permittivity_1D_generalized(
+    omega: u.Quantity[u.rad / u.s],
+    kWave: u.Quantity[u.rad / u.m],
+    T: u.Quantity[u.K],
+    n: u.Quantity[u.m**-3],
+    particle: ParticleLike,
+    z_mean: float | None = None,
+) -> u.Quantity[u.dimensionless_unscaled]:
+    r"""
+    Compute the dielectric permittivity for a plasma with a given 1D
+    distribution function.
+
+    This function can calculate both the ion and electron
+    permittivities.  No additional effects are considered (e.g.
+    magnetic fields, relativistic effects, strongly coupled regime, etc.).
+
+    Parameters
+    ----------
+    omega : `~astropy.units.Quantity`
+        The frequency, in rad/s, of the electromagnetic wave propagating
+        through the plasma.
+
+    kWave : `~astropy.units.Quantity`
+        The corresponding wavenumber, in rad/m, of the electromagnetic
+        wave propagating through the plasma.
+
+    T : `~astropy.units.Quantity`
+        The plasma temperature — this can be either the electron or the
+        ion temperature, but should be consistent with density and
+        particle.
+
+    n : `~astropy.units.Quantity`
+        The plasma density — this can be either the electron or the ion
+        density, but should be consistent with temperature and particle.
+
+    particle : |particle-like|
+        The plasma particle species.
+
+    z_mean : `float`
+        The average ionization of the plasma. This is only required for
+        calculating the ion permittivity.
+
+    Returns
+    -------
+    chi : `~astropy.units.Quantity`
+        The ion or the electron dielectric permittivity of the plasma.
+        This is a dimensionless quantity.
+
+    Notes
+    -----
+    The dielectric permittivities for a plasma are described
+    by the following equations (see p. 106 of :cite:t:`froula:2011`):
+
+    .. math::
+        χ_e(k, ω) = - \frac{α_e^2}{2} Z'(x_e)
+
+        χ_i(k, ω) = - \frac{α_i^2}{2}\frac{Z}{} Z'(x_i)
+
+        α = \frac{ω_p}{k v_{Th}}
+
+        x = \frac{ω}{k v_{Th}}
+
+    :math:`χ_e` and :math:`χ_i` are the electron and ion permittivities,
+    respectively. :math:`Z'` is the derivative of the plasma dispersion
+    function. :math:`α` is the scattering parameter which delineates
+    the difference between the collective and non-collective Thomson
+    scattering regimes. :math:`x` is the dimensionless phase velocity
+    of the electromagnetic wave propagating through the plasma.
+
+    Examples
+    --------
+    >>> import astropy.units as u
+    >>> from numpy import pi
+    >>> from plasmapy.formulary import thermal_speed
+    >>> T = 30 * 11600 * u.K
+    >>> n = 1e18 * u.cm**-3
+    >>> particle = "Ne"
+    >>> Z = 8
+    >>> vth = thermal_speed(T, particle, method="most_probable")
+    >>> omega = 5.635e14 * 2 * pi * u.rad / u.s
+    >>> k_wave = omega / vth
+    >>> permittivity_1D_generalized(omega, k_wave, T, n, particle, Z)
+    <Quantity -6.72955...e-08+5.76163...e-07j>
+
+    For user convenience
+    `~plasmapy.formulary.dielectric.permittivity_1D_generalized_lite`
+    is bound to this function and can be used as follows:
+
+    >>> from plasmapy.formulary import plasma_frequency
+    >>> wp = plasma_frequency(n, particle, Z=Z)
+    >>> permittivity_1D_generalized.lite(
+    ...     omega.value, k_wave.value, vth=vth.value, wp=wp.value
+    ... )
+    np.complex128(-6.72955...e-08+5.76163...e-07j)
+    """
+    vth = thermal_speed(T=T, particle=particle, method="most_probable").value
+    wp = plasma_frequency(n=n, particle=particle, Z=z_mean).value
+
+    chi = permittivity_1D_generalized_lite(
         omega.value,
         kWave.value,
         vth,
