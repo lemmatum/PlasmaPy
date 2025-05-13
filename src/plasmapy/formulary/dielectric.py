@@ -248,9 +248,10 @@ def permittivity_1D_Maxwellian_lite(omega, kWave, vth, wp):
 
     Parameters
     ----------
-    omega : |array_like| of real positive values
+    omega : |array_like| of real or complex values
         The frequency, in rad/s, of the electromagnetic wave propagating
-        through the plasma.
+        through the plasma. This can be complex valued (e.g. evanescent
+        waves past a critical density surface).
 
     kWave : |array_like| of real values
         The corresponding wavenumber, in rad/m, of the electromagnetic
@@ -322,7 +323,8 @@ def permittivity_1D_Maxwellian(
     ----------
     omega : `~astropy.units.Quantity`
         The frequency, in rad/s, of the electromagnetic wave propagating
-        through the plasma.
+        through the plasma. This can be complex valued (e.g. evanescent
+        waves past a critical density surface).
 
     kWave : `~astropy.units.Quantity`
         The corresponding wavenumber, in rad/m, of the electromagnetic
@@ -421,9 +423,10 @@ def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
 
     Parameters
     ----------
-    omega : |array_like| of real positive values
+    omega : |array_like| of real or complex values
         The frequency, in rad/s, of the electromagnetic wave propagating
-        through the plasma.
+        through the plasma. This can be complex valued (e.g. evanescent
+        waves past a critical density surface).
 
     kWave : |array_like| of real values
         The corresponding wavenumber, in rad/m, of the electromagnetic
@@ -495,7 +498,8 @@ def permittivity_1D_generalized(
     ----------
     omega : `~astropy.units.Quantity`
         The frequency, in rad/s, of the electromagnetic wave propagating
-        through the plasma.
+        through the plasma. This can be complex valued (e.g. evanescent
+        waves past a critical density surface).
 
     kWave : `~astropy.units.Quantity`
         The corresponding wavenumber, in rad/m, of the electromagnetic

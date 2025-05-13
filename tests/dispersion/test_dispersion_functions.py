@@ -10,9 +10,14 @@ from hypothesis.strategies import complex_numbers
 from numpy import pi as π  # noqa: ICN003
 from scipy.special import gamma as Γ  # noqa: N812
 
+from plasmapy.formulary.frequencies import plasma_frequency
+from plasmapy.formulary.speeds import thermal_speed
+from plasmapy.formulary.distribution import Maxwellian_1D
 from plasmapy.dispersion.dispersion_functions import (
     plasma_dispersion_func,
     plasma_dispersion_func_deriv,
+    plasma_dispersion_1D_dist,
+    plasma_dispersion_1D_dist_deriv,
 )
 
 # Expected errors table. Used for both plasma_dispersion_func
@@ -189,6 +194,113 @@ class TestPlasmaDispersionFunction:
                 f"plasma_dispersion_func({w}) did not raise "
                 f"{expected_error.__name__} as expected."
             )
+            
+            
+class TestPlasmaDispersionFunction1DGeneralized:
+    """Test class for `plasmapy.dispersion.plasma_dispersion_func`."""
+    
+    def setup_method(self):
+        self.Te = 10 * 11604 * u.K
+        self.ne = 1e17 * u.cm ** -3
+        # precalculate vTh to speed things up
+        self.particle = "e-"
+        self.vth = thermal_speed(self.Te, particle=self.particle, method="most_probable")
+        self.wp = plasma_frequency(n=self.ne, particle=self.particle)
+        self.wavelength = 532 * u.nm
+        self.angle = 45 * np.pi / 180
+        self.kWave = (4 * np.pi / self.wavelength) * np.sin(self.angle/2) * u.rad
+        
+        self.f = lambda v: Maxwellian_1D(v=v,
+                                        T=self.Te,
+                                        particle=self.particle,
+                                        v_drift=0,
+                                        vTh=self.vth,
+                                        units="units",
+                                        mass_numb=None,
+                                        Z=None)
+        
+        self.dispersion_func = lambda z: plasma_dispersion_1D_dist(zeta=z,
+                                                                  dist=self.f,
+                                                                  kWave=self.kWave,
+                                                                  vth=self.vth,
+                                                                  wp=self.wp,
+                                                                  particle=self.particle,
+                                                                  )
+
+    @pytest.mark.parametrize(("w", "expected"), plasma_dispersion_func_table)
+    def test_plasma_dispersion_1D_dist(self, w, expected) -> None:
+        r"""Test plasma_dispersion_func against tabulated results and
+        known symmetry properties."""
+
+        # Many of the tabulated results originally came from the book
+        # entitled "The Plasma Dispersion Function: The Hilbert Transform
+        # of the Gaussian" by B. D. Fried and S. D. Conte (1961).
+        
+        Z_of_w = self.dispersion_func(w)
+
+        assert u.isclose(Z_of_w, expected, atol=1e-12 * (1 + 1j), rtol=1e-12), (
+            f"plasma_dispersion_func({w}) equals {Z_of_w} instead of the "
+            f"expected approximate result of {expected}.  The difference between "
+            f"the actual and expected results is {Z_of_w - expected}."
+        )
+    
+    def test_plasma_dispersion_1D_dist_compare_wofz_real(self) -> None:
+        """Test against wofz values on the real line for a Maxwellian."""
+        zetas = np.arange(-10, 10, 1)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func(zeta)
+            integ[idx] = self.dispersion_func(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
+        
+    def test_plasma_dispersion_1D_dist_compare_wofz_top_half(self) -> None:
+        """Test against wofz values in the top half of the complex plane for a Maxwellian."""
+        zetas = np.arange(0, 10, 1) * (1 + 1j)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func(zeta)
+            integ[idx] = self.dispersion_func(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
+        
+    def test_plasma_dispersion_1D_dist_compare_wofz_bottom_half(self) -> None:
+        """Test against wofz values in the bottom half of the complex plane for a Maxwellian."""
+        zetas = np.arange(0, 10, 1) * (1 - 1j)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func(zeta)
+            integ[idx] = self.dispersion_func(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
+
+    def test_plasma_dispersion_1D_dist_roots(self) -> None:
+        """Test roots of the plasma dispersion function."""
+
+        # The first five roots of the plasma dispersion function are given
+        # on page 402 of Swanson (2003), with some roundoff or truncation
+        # error in the final decimal point.  These roots were found to
+        # higher precision using mpmath.findroot.
+
+        roots = np.array(
+            [
+                1.991_466_842_833_879_6 - 1.354_810_128_112_006_2j,
+                2.691_149_024_251_438_8 - 2.177_044_906_089_615_9j,
+                3.235_330_868_352_816_5 - 2.784_387_613_230_428_2j,
+                3.697_309_702_468_468_4 - 3.287_410_789_389_848_6j,
+                4.106_107_284_682_632_1 - 3.725_948_719_445_790_4j,
+            ],
+            dtype=np.complex128,
+        )
+
+        for root in roots:
+            Z_at_root = self.dispersion_func(root)
+            assert u.isclose(Z_at_root, 0 + 0j, atol=5e-15 * (1 + 1j)), (
+                "A root of the plasma dispersion function is expected "
+                f"at w = {root}, but plasma_dispersion_1D_dist({root}) is "
+                f"equal to {Z_at_root} instead of 0j."
+            )
+
 
 
 # Array of expected values for plasma_dispersion_func_deriv
@@ -260,3 +372,89 @@ class TestPlasmaDispersionFunctionDeriv:
                 f"plasma_dispersion_func_deriv({w}) did not raise "
                 f"{expected_error.__name__} as expected."
             )
+
+
+
+class TestPlasmaDispersionFunctionDeriv1DGeneralized:
+    """Test class for `plasmapy.dispersion.plasma_dispersion_func_deriv`."""
+    
+    def setup_method(self):
+        self.Te = 10 * 11604 * u.K
+        self.ne = 1e17 * u.cm ** -3
+        # precalculate vTh to speed things up
+        self.particle = "e-"
+        self.vth = thermal_speed(self.Te, particle=self.particle, method="most_probable")
+        self.wp = plasma_frequency(n=self.ne, particle=self.particle)
+        self.wavelength = 532 * u.nm
+        self.angle = 45 * np.pi / 180
+        self.kWave = (4 * np.pi / self.wavelength) * np.sin(self.angle/2) * u.rad
+        
+        self.f = lambda v: Maxwellian_1D(v=v,
+                                        T=self.Te,
+                                        particle=self.particle,
+                                        v_drift=0,
+                                        vTh=self.vth,
+                                        units="units",
+                                        mass_numb=None,
+                                        Z=None)
+        
+        self.dispersion_func = lambda z: plasma_dispersion_1D_dist(zeta=z,
+                                                                  dist=self.f,
+                                                                  kWave=self.kWave,
+                                                                  vth=self.vth,
+                                                                  wp=self.wp,
+                                                                  particle=self.particle,
+                                                                  )
+        
+        self.dispersion_func_deriv = lambda z: plasma_dispersion_1D_dist_deriv(zeta=z,
+                                                                               dist=self.f,
+                                                                               kWave=self.kWave,
+                                                                               vth=self.vth,
+                                                                               wp=self.wp,
+                                                                               particle=self.particle,
+                                                                               )
+
+    @pytest.mark.parametrize(("w", "expected"), plasma_disp_deriv_table)
+    def test_plasma_dispersion_1D_deriv(self, w, expected) -> None:
+        r"""Test plasma_dispersion_func_deriv against tabulated results"""
+
+        # The tabulated results are taken from Fried & Conte (1961)
+
+        Z_deriv = self.dispersion_func_deriv(w)
+
+        assert u.isclose(Z_deriv, expected, atol=5e-5 * (1 + 1j), rtol=5e-5), (
+            f"The derivative of the plasma dispersion function does not match "
+            f"the expected value for {w = }.  The value of "
+            f"plasma_dispersion_func_deriv({w}) equals {Z_deriv} whereas the "
+            f"expected value is {expected}.  The difference between the actual "
+            f"and expected results is {Z_deriv - expected}."
+        )
+    def test_plasma_dispersion_1D_deriv_compare_wofz_real(self) -> None:
+        """Test against wofz values on the real line for a Maxwellian."""
+        zetas = np.arange(-10, 10, 1)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func_deriv(zeta)
+            integ[idx] = self.dispersion_func_deriv(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
+        
+    def test_plasma_dispersion_1D_deriv_compare_wofz_top_half(self) -> None:
+        """Test against wofz values in the top half of the complex plane for a Maxwellian."""
+        zetas = np.arange(0, 10, 1) * (1 + 1j)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func_deriv(zeta)
+            integ[idx] = self.dispersion_func_deriv(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
+        
+    def test_plasma_dispersion_1D_deriv_compare_wofz_bottom_half(self) -> None:
+        """Test against wofz values in the bottom half of the complex plane for a Maxwellian."""
+        zetas = np.arange(0, 10, 1) * (1 - 1j)
+        wofz = np.zeros_like(zetas, dtype=np.complex128)
+        integ = np.zeros_like(zetas, dtype=np.complex128)
+        for idx, zeta in enumerate(zetas):
+            wofz[idx] = plasma_dispersion_func_deriv(zeta)
+            integ[idx] = self.dispersion_func_deriv(zeta)
+        assert u.isclose(wofz, integ, atol=5e-15*(1 + 1j)).all()
