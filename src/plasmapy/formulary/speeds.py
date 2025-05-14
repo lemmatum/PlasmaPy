@@ -7,8 +7,9 @@ __all__ = [
     "thermal_speed",
     "thermal_speed_coefficients",
     "thermal_speed_lite",
+    "generalized_gaussian_thermal_speed",
 ]
-__aliases__ = ["cs_", "va_", "vth_", "vth_kappa_"]
+__aliases__ = ["cs_", "va_", "vth_", "vth_kappa_", "vth_GGD_"]
 __lite_funcs__ = ["thermal_speed_lite"]
 
 import warnings
@@ -17,6 +18,7 @@ from typing import Literal
 
 import astropy.units as u
 import numpy as np
+from scipy.special import gamma
 from astropy.constants.si import k_B, mu0
 
 from plasmapy.formulary import lengths
@@ -844,3 +846,119 @@ def kappa_thermal_speed(
 
 vth_kappa_ = kappa_thermal_speed
 """Alias to `~plasmapy.formulary.speeds.kappa_thermal_speed`."""
+
+
+
+
+@check_relativistic
+@validate_quantities(
+    T={"can_be_negative": False, "equivalencies": u.temperature_energy()}
+)
+@particle_input
+def generalized_gaussian_thermal_speed(
+    T: u.Quantity[u.K],
+    p,
+    particle: ParticleLike,
+    method: Literal["most_probable", "rms", "mean_magnitude"] = "most_probable",
+    *,
+    mass_numb: int | None = None,
+    Z: float | None = None,
+) -> u.Quantity[u.m / u.s]:
+    r"""
+    Return the most probable speed for a particle within a generalized Gaussian
+    distribution.
+
+    **Aliases:** `vth_GGD_`
+
+    Parameters
+    ----------
+    T : `~astropy.units.Quantity`
+        The particle temperature in either kelvin or energy per particle
+
+    p : float
+        Power of the generalized gaussian. Must be greater than 0. p=2 is
+        equivalent to a regular Gaussian.
+
+    particle : |particle-like|
+        Representation of the particle species (e.g., ``'p+'`` for protons,
+        ``'D+'`` for deuterium, or 'He-4 +1' for singly ionized helium-4).
+
+    method : `str`, default: ``"most_probable"``
+        Method to be used for calculating the thermal speed. Options are
+        ``'most_probable'``, ``'rms'``, and ``'mean_magnitude'``.
+
+    mass_numb : integer, optional
+        The mass number corresponding to ``particle``.
+
+    Z : real number, optional
+        The charge number corresponding to ``particle``.
+
+    Returns
+    -------
+    V : `~astropy.units.Quantity`
+        Particle thermal speed.
+
+    Raises
+    ------
+    `TypeError`
+        The particle temperature is not a `~astropy.units.Quantity`.
+
+    `~astropy.units.UnitConversionError`
+        If the particle temperature is not in units of temperature or
+        energy per particle.
+
+    `ValueError`
+        The particle temperature is invalid or particle cannot be used to
+        identify an isotope or particle.
+
+    Warns
+    -----
+    : `~plasmapy.utils.exceptions.RelativityWarning`
+        If the particle thermal speed exceeds 5% of the speed of light.
+
+    : `~astropy.units.UnitsWarning`
+        If units are not provided, SI units are assumed.
+
+    See Also
+    --------
+
+
+    Notes
+    -----
+    The particle thermal speed is given by:
+
+    .. math::
+        v_{th} = \sqrt{\frac{3 k_B T \Gamma(3/p)}{m \Gamma(5/p)}}
+
+    For more discussion on the ``'mean_magnitude'`` calculation method,
+    see `PlasmaPy issue #186
+    <https://github.com/PlasmaPy/PlasmaPy/issues/186>`__.
+
+    Examples
+    --------
+    >>> import astropy.units as u
+    >>> generalized_gaussian_thermal_speed(5*u.eV, 2, 'p+')
+    <Quantity 30949.6... m / s>
+    >>> generalized_gaussian_thermal_speed(1e6*u.K, p=2, particle='p+')
+    <Quantity 128486... m / s>
+    >>> generalized_gaussian_thermal_speed(5*u.eV, p=2, particle='e-')
+    <Quantity 132620... m / s>
+    >>> generalized_gaussian_thermal_speed(1e6*u.K, p=2, particle='e-')
+    <Quantity 550569... m / s>
+    >>> generalized_gaussian_thermal_speed(1e6*u.K, 2, "e-", method="rms")
+    <Quantity 674307... m / s>
+    >>> generalized_gaussian_thermal_speed(1e6*u.K, 2, "e-", method="mean_magnitude")
+    <Quantity 621251... m / s>
+    """
+    # Checking power
+    if p <= 0:
+        raise ValueError(f"p must be > 0, got {p}")
+    # different methods, as per https://en.wikipedia.org/wiki/Thermal_velocity
+    vth = thermal_speed(T=T, particle=particle, method=method)
+    
+    coeff = np.sqrt(3 * gamma(3/p) / (2 * gamma(5/p)))
+    return vth * coeff
+
+
+vth_GGD_ = generalized_gaussian_thermal_speed
+"""Alias to `~plasmapy.formulary.speeds.generalized_gaussian_thermal_speed`."""

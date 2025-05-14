@@ -20,7 +20,9 @@ import astropy.units as u
 import numpy as np
 from scipy.special import gamma
 
-from plasmapy.formulary.speeds import kappa_thermal_speed, thermal_speed
+from plasmapy.formulary.speeds import (kappa_thermal_speed,
+                                       thermal_speed,
+                                       generalized_gaussian_thermal_speed)
 from plasmapy.particles import ParticleLike, particle_input
 from plasmapy.utils._units_definitions import (
     SPEED_DISTRIBUTION_UNITS_1D,
@@ -1323,10 +1325,7 @@ def Generalized_Gaussian_1D(
 
     if np.isnan(vTh):
         # get thermal speed
-        from astropy.constants.si import k_B
-        from plasmapy.particles.atomic import particle_mass
-        m = particle_mass(particle)
-        vp = (np.sqrt(3 * k_B * T * u.K * gamma(3/p) / (m * gamma(5/p)))).to_value(SPEED_UNITS)
+        vp = (generalized_gaussian_thermal_speed(T << u.K, p, particle=particle)).to_value(SPEED_UNITS)
 
     coeff = p / (2 * vp * gamma(1/p))
     expTerm = np.exp(-np.abs((v - v_drift) / vp) ** p)
