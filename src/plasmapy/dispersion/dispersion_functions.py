@@ -384,7 +384,7 @@ def plasma_dispersion_1D_dist(
         # the residue on a semi-circle Cauchy integral around the pole
         residue = np.pi * 1j * f_func(pole)
         # combine it all together
-        total_integral = (neg_integral + pos_integral + cauchy_integral + residue) / 1
+        total_integral = (neg_integral + pos_integral + cauchy_integral + residue)
         return total_integral
     elif zeta.imag > 0:
         # analytic extension to the upper half of the complex plane (growth)
@@ -401,7 +401,7 @@ def plasma_dispersion_1D_dist(
                                       maxp1=50,
                                       limlst=50,
                                       complex_func=True)
-        total_integral = integral / 1
+        total_integral = integral
         return total_integral
     elif zeta.imag < 0:
         # analytic extension to the lower half of the complex plane (dampening)
@@ -420,7 +420,7 @@ def plasma_dispersion_1D_dist(
                                       complex_func=True)
         # the residue for analytic continuation
         residue = np.pi * 2j * f_func(pole)
-        total_integral = (integral + residue) / 1
+        total_integral = (integral + residue)
         return total_integral
         
 
@@ -607,7 +607,7 @@ def plasma_dispersion_1D_dist_deriv(
         # the residue on a semi-circle Cauchy integral around the pole
         residue = np.pi * 1j * f_func(pole)
         # combine it all together
-        total_integral = (neg_integral + pos_integral + cauchy_integral + residue) / 1
+        total_integral = (neg_integral + pos_integral + cauchy_integral + residue)
         return total_integral
     elif zeta.imag > 0:
         # analytic extension to the upper half of the complex plane (growth)
@@ -624,7 +624,7 @@ def plasma_dispersion_1D_dist_deriv(
                                       maxp1=50,
                                       limlst=50,
                                       complex_func=True)
-        total_integral = integral / 1
+        total_integral = integral
         return total_integral
     elif zeta.imag < 0:
         # analytic extension to the lower half of the complex plane (dampening)
@@ -643,6 +643,6 @@ def plasma_dispersion_1D_dist_deriv(
                                       complex_func=True)
         # the residue for analytic continuation
         residue = np.pi * 2j * f_func(pole)
-        total_integral = (integral + residue) / 1
+        total_integral = (integral + residue)
         return total_integral
 
