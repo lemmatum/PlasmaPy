@@ -13,7 +13,7 @@ __all__ = [
     "Maxwellian_speed_3D",
     "kappa_velocity_1D",
     "kappa_velocity_3D",
-    "Super_Gaussian_1D",
+    "Generalized_Gaussian_1D",
 ]
 
 import astropy.units as u
@@ -1211,7 +1211,7 @@ def kappa_velocity_3D(
 
 
 @particle_input
-def Super_Gaussian_1D(
+def Generalized_Gaussian_1D(
     v,
     T,
     p : int,
@@ -1224,7 +1224,7 @@ def Super_Gaussian_1D(
     Z=None,
 ):
     r"""
-    Probability distribution function of velocity for a Super-Gaussian
+    Probability distribution function of velocity for a generalized Gaussian
     distribution in 1D.
 
     Returns the probability density function at the velocity ``v`` in m/s
@@ -1239,8 +1239,9 @@ def Super_Gaussian_1D(
     T : `~astropy.units.Quantity`
         The temperature in kelvin.
         
-    p : int
-        Power of the super-Gaussian.
+    p : float
+        Power of the generalized gaussian. Must be greater than 0. p=2 is
+        equivalent to a regular Gaussian.
 
     particle : `str`, optional
         Representation of the particle species(e.g., ``'p+'`` for protons,
@@ -1284,28 +1285,30 @@ def Super_Gaussian_1D(
 
     `ValueError`
         If the temperature is negative, or the particle mass or charge state
-        cannot be found.
+        cannot be found, or the power of the generalized Gaussian is < 0.
 
     Notes
     -----
-    In one dimension, the Maxwellian distribution function for a particle of
+    In one dimension, the Generalized Gaussian distribution function for a particle of
     mass m, velocity v, a drift velocity V and with temperature T is:
 
     .. math::
 
-        f = \sqrt{\frac{m}{2π k_B T}} e^{-\frac{m}{2 k_B T} (v-V)^2}
-        \equiv \frac{1}{\sqrt{π v_{Th}^2}} e^{-(v - v_{drift})^2 / v_{Th}^2}
+        f(v) = \frac{p}{2 v_{th} \Gamma(1/p)}\exp\left[-\left|\frac{v - v_D}{v_{th}}\right|^p\right]
 
-    where :math:`v_{Th} = \sqrt{2 k_B T / m}` is the thermal speed
+
+    where :math:`v_{th} = \sqrt{\frac{3 k_B T \Gamma(3/p)}{m \Gamma(5/p)}}` is
+    the thermal speed
 
     Examples
     --------
     >>> import astropy.units as u
     >>> v = 1 * u.m / u.s
-    >>> Maxwellian_1D(v=v, T=30000 * u.K, particle="e-", v_drift=0 * u.m / u.s)
+    >>> Generalized_Gaussian_1D(v=v, p=2, T=30000 * u.K, particle="e-", v_drift=0 * u.m / u.s)
     <Quantity 5.9163...e-07 s / m>
     """
-
+    if p <= 0:
+        raise ValueError(f"p must be > 0, got {p}")
     if units == "units":
         # unit checks and conversions
         # checking velocity units
