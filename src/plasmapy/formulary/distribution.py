@@ -13,6 +13,7 @@ __all__ = [
     "Maxwellian_speed_3D",
     "kappa_velocity_1D",
     "kappa_velocity_3D",
+    "Super_Gaussian_1D",
 ]
 
 import astropy.units as u
@@ -1203,6 +1204,132 @@ def kappa_velocity_3D(
     distFunc = coeff1 * coeff2 * expTerm
     if units == "units":
         return distFunc << SPEED_DISTRIBUTION_UNITS_3D
+    elif units == "unitless":
+        return distFunc
+    else:
+        raise ValueError(f"Units must be either 'units' or 'unitless', got {units}).")
+
+
+@particle_input
+def Super_Gaussian_1D(
+    v,
+    T,
+    p : int,
+    particle: ParticleLike = "e-",
+    v_drift: float | u.Quantity[u.m / u.s] = 0,
+    vTh=np.nan,
+    units: str = "units",
+    *,
+    mass_numb=None,
+    Z=None,
+):
+    r"""
+    Probability distribution function of velocity for a Super-Gaussian
+    distribution in 1D.
+
+    Returns the probability density function at the velocity ``v`` in m/s
+    to find a particle ``particle`` in a plasma of temperature ``T``
+    following the Super-Gaussian distribution function.
+
+    Parameters
+    ----------
+    v : `~astropy.units.Quantity`
+        The velocity in units convertible to m/s.
+
+    T : `~astropy.units.Quantity`
+        The temperature in kelvin.
+        
+    p : int
+        Power of the super-Gaussian.
+
+    particle : `str`, optional
+        Representation of the particle species(e.g., ``'p+'`` for protons,
+        ``'D+'`` for deuterium, or ``'He-4 +1'`` for singly ionized
+        helium-4), which defaults to electrons.
+
+    v_drift : `~astropy.units.Quantity`, optional
+        The drift velocity in units convertible to m/s.
+
+    vTh : `~astropy.units.Quantity`, optional
+        Thermal velocity (most probable velocity) in m/s. This is used for
+        optimization purposes to avoid re-calculating ``vTh``, for example
+        when integrating over velocity-space.
+
+    units : `str`, optional
+        Selects whether to run function with units and unit checks (when
+        equal to "units") or to run as unitless (when equal to "unitless").
+        The unitless version is substantially faster for intensive
+        computations.
+
+    mass_numb : integer, |keyword-only|, optional
+        The mass number associated with ``particle``.
+
+    Z : real number, |keyword-only|, optional
+        The charge number associated with ``particle``.
+
+    Returns
+    -------
+    f : `~astropy.units.Quantity`
+        Probability density in units of velocity\ :sup:`-1`\ , normalized so that
+        :math:`\int_{-∞}^{+∞} f(v) dv = 1`.
+
+    Raises
+    ------
+    `TypeError`
+        The parameter arguments are not Quantities and
+        cannot be converted into Quantities.
+
+    `~astropy.units.UnitConversionError`
+        If the parameters are not in appropriate units.
+
+    `ValueError`
+        If the temperature is negative, or the particle mass or charge state
+        cannot be found.
+
+    Notes
+    -----
+    In one dimension, the Maxwellian distribution function for a particle of
+    mass m, velocity v, a drift velocity V and with temperature T is:
+
+    .. math::
+
+        f = \sqrt{\frac{m}{2π k_B T}} e^{-\frac{m}{2 k_B T} (v-V)^2}
+        \equiv \frac{1}{\sqrt{π v_{Th}^2}} e^{-(v - v_{drift})^2 / v_{Th}^2}
+
+    where :math:`v_{Th} = \sqrt{2 k_B T / m}` is the thermal speed
+
+    Examples
+    --------
+    >>> import astropy.units as u
+    >>> v = 1 * u.m / u.s
+    >>> Maxwellian_1D(v=v, T=30000 * u.K, particle="e-", v_drift=0 * u.m / u.s)
+    <Quantity 5.9163...e-07 s / m>
+    """
+
+    if units == "units":
+        # unit checks and conversions
+        # checking velocity units
+        v = v.to_value(SPEED_UNITS)
+        # Catching case where drift velocities have default values,
+        v_drift = _v_drift_conversion(v_drift)
+        # convert temperature to kelvin
+        T = T.to_value(u.K, equivalencies=u.temperature_energy())
+        if not np.isnan(vTh):
+            # check units of thermal velocity
+            vTh = vTh.to_value(SPEED_UNITS)
+
+    if np.isnan(vTh):
+        # get thermal speed
+        from astropy.constants.si import k_B
+        from plasmapy.particles.atomic import particle_mass
+        m = particle_mass(particle)
+        vp = (np.sqrt(3 * k_B * T * u.K * gamma(3/p) / (m * gamma(5/p)))).to_value(SPEED_UNITS)
+
+    coeff = p / (2 * vp * gamma(1/p))
+    expTerm = np.exp(-np.abs((v - v_drift) / vp) ** p)
+    distFunc = coeff * expTerm
+    if units == "units":
+        return distFunc << SPEED_DISTRIBUTION_UNITS_1D
     elif units == "unitless":
         return distFunc
     else:
