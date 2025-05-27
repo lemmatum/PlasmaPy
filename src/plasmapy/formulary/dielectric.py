@@ -13,12 +13,14 @@ __lite_funcs__ = ["permittivity_1D_Maxwellian_lite",
 
 from collections import namedtuple
 from collections.abc import Sequence
+from collections.abc import Callable
 
 import astropy.units as u
 import numpy as np
 
 from plasmapy.dispersion.dispersion_functions import (plasma_dispersion_func_deriv,
-                                                      plasma_dispersion_1D_dist_deriv)
+                                                      plasma_dispersion_1D_dist_deriv,
+                                                      plasma_dispersion_1D_dist_deriv_arr)
 from plasmapy.formulary.frequencies import gyrofrequency, plasma_frequency
 from plasmapy.formulary.speeds import thermal_speed
 from plasmapy.particles.particle_class import ParticleLike
@@ -304,7 +306,7 @@ def permittivity_1D_Maxwellian_lite(omega, kWave, vth, wp):
     kWave={"none_shall_pass": True}, validations_on_return={"can_be_complex": True}
 )
 def permittivity_1D_Maxwellian(
-    omega: u.Quantity[u.rad / u.s],
+    omega: complex | u.Quantity[u.rad / u.s],
     kWave: u.Quantity[u.rad / u.m],
     T: u.Quantity[u.K],
     n: u.Quantity[u.m**-3],
@@ -412,7 +414,12 @@ def permittivity_1D_Maxwellian(
 
 
 @preserve_signature
-def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
+def permittivity_1D_generalized_lite(omega,
+                                     kWave,
+                                     dist: Callable[[float | u.Quantity[u.m / u.s]], float | u.Quantity[u.s / u.m]],
+                                     vth,
+                                     wp,
+                                     particle: ParticleLike,):
     r"""
     The :term:`lite-function` for
     `~plasmapy.formulary.dielectric.permittivity_1D_generalized`.
@@ -431,6 +438,15 @@ def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
     kWave : |array_like| of real values
         The corresponding wavenumber, in rad/m, of the electromagnetic
         wave propagating through the plasma.
+        
+    dist : function
+        1D distribution function of the plasma velocity. The function should only
+        have one argument, which is the velocity in m/s. The function
+        should return probability density in units of velocity\ :sup:`-1`\ , 
+        normalized so that :math:`\int_{-∞}^{+∞} f(v) dv = 1`. When considering
+        an anisotropic distribution, dist should be the slice through the
+        distribution function which is aligned with the k-vector. The function
+        should be differentiable (analytic).
 
     vth : `float`
         The 3D, most probable thermal speed, in m/s. (i.e. it includes
@@ -439,6 +455,9 @@ def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
 
     wp : `float`
         The plasma frequency, in rad/s.
+        
+    particle : |particle-like|
+        The plasma particle species.
 
     Returns
     -------
@@ -470,8 +489,15 @@ def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
     # explicitly removing factor of sqrt(2) to be consistent with Froula
     alpha = np.sqrt(2) * wp / (kWave * vth)
     # The dimensionless phase velocity of the propagating EM wave.
-    zeta = omega / (kWave * vth)
-    return -0.5 * (alpha**2) * plasma_dispersion_1D_dist_deriv(zeta)
+    zetas = omega / (kWave * vth)
+    epsilon =  -0.5 * (alpha**2) * plasma_dispersion_1D_dist_deriv_arr(
+        zetas=zetas,
+        dist=dist,
+        kWave=kWave * u.rad / u.m,
+        vth=vth * u.m / u.s,
+        wp=wp * u.rad / u.s,
+        particle=particle)
+    return epsilon
 
 
 @bind_lite_func(permittivity_1D_generalized_lite)
@@ -479,8 +505,9 @@ def permittivity_1D_generalized_lite(omega, kWave, vth, wp):
     kWave={"none_shall_pass": True}, validations_on_return={"can_be_complex": True}
 )
 def permittivity_1D_generalized(
-    omega: u.Quantity[u.rad / u.s],
+    omega: complex | u.Quantity[u.rad / u.s],
     kWave: u.Quantity[u.rad / u.m],
+    dist: Callable[[float | u.Quantity[u.m / u.s]], float | u.Quantity[u.s / u.m]],
     T: u.Quantity[u.K],
     n: u.Quantity[u.m**-3],
     particle: ParticleLike,
@@ -504,6 +531,15 @@ def permittivity_1D_generalized(
     kWave : `~astropy.units.Quantity`
         The corresponding wavenumber, in rad/m, of the electromagnetic
         wave propagating through the plasma.
+        
+    dist : function
+        1D distribution function of the plasma velocity. The function should only
+        have one argument, which is the velocity in m/s. The function
+        should return probability density in units of velocity\ :sup:`-1`\ , 
+        normalized so that :math:`\int_{-∞}^{+∞} f(v) dv = 1`. When considering
+        an anisotropic distribution, dist should be the slice through the
+        distribution function which is aligned with the k-vector. The function
+        should be differentiable (analytic).
 
     T : `~astropy.units.Quantity`
         The plasma temperature — this can be either the electron or the
@@ -574,13 +610,15 @@ def permittivity_1D_generalized(
     ... )
     np.complex128(-6.72955...e-08+5.76163...e-07j)
     """
-    vth = thermal_speed(T=T, particle=particle, method="most_probable").value
-    wp = plasma_frequency(n=n, particle=particle, Z=z_mean).value
+    vth = thermal_speed(T=T, particle=particle, method="most_probable")
+    wp = plasma_frequency(n=n, particle=particle, Z=z_mean)
 
     chi = permittivity_1D_generalized_lite(
         omega.value,
         kWave.value,
-        vth,
-        wp,
-    )
+        dist,
+        vth.value,
+        wp.value,
+        particle,
+        )
     return chi * u.dimensionless_unscaled
