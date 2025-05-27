@@ -6,7 +6,9 @@ derivative :math:`Z′(ζ)`.
 __all__ = ["plasma_dispersion_func",
            "plasma_dispersion_func_deriv",
            "plasma_dispersion_1D_dist",
-           "plasma_dispersion_1D_dist_deriv"]
+           "plasma_dispersion_1D_dist_arr",
+           "plasma_dispersion_1D_dist_deriv",
+           "plasma_dispersion_1D_dist_deriv_arr"]
 
 
 import astropy.units as u
@@ -233,7 +235,7 @@ def plasma_dispersion_func_deriv(
 
 
 def plasma_dispersion_1D_dist(
-    zeta: complex | np.ndarray | u.Quantity[u.dimensionless_unscaled],
+    zeta: complex | u.Quantity[u.dimensionless_unscaled],
     dist: Callable[[float | u.Quantity[u.m / u.s]], float | u.Quantity[u.s / u.m]],
     kWave: u.Quantity[u.rad / u.m],
     vth: u.Quantity[u.m / u.s],
@@ -422,8 +424,100 @@ def plasma_dispersion_1D_dist(
         # the residue for analytic continuation
         residue = np.pi * 2j * f_func(pole)
         total_integral = (integral + residue)
-        return total_integral
+        return total_integral * u.dimensionless_unscaled
+    
+
+def plasma_dispersion_1D_dist_arr(
+    zetas: complex | np.ndarray | u.Quantity[u.dimensionless_unscaled],
+    dist: Callable[[float | u.Quantity[u.m / u.s]], float | u.Quantity[u.s / u.m]],
+    kWave: u.Quantity[u.rad / u.m],
+    vth: u.Quantity[u.m / u.s],
+    wp: u.Quantity[u.rad / u.s],
+    particle: ParticleLike = "e-",
+) -> complex | np.ndarray | u.Quantity[u.dimensionless_unscaled]:
+    r"""
+    Convenience function for passing an array of zetas to
+    plasma_dispersion_1D_dist.
+
+    The plasma dispersion function is defined as (see eq 15 in
+    https://arxiv.org/abs/1305.6476 and https://doi.org/10.1063/1.4822332):
+
+    .. math::
+        g^{+}(\zeta) =
+        \begin{cases}
+            \frac{1}{\pi} \int_{-\infty}^{+\infty} \frac{f(x)}{x - \zeta} dx, \quad \Im(\zeta) > 0 \\
+            \frac{1}{\pi} PV\int_{-\infty}^{+\infty} \frac{f(x)}{x - \zeta} dx + if(\zeta), \quad \Im(\zeta) = 0 \\
+            \frac{1}{\pi} \int_{-\infty}^{+\infty} \frac{f(x)}{x - \zeta} dx + 2if(\zeta), \quad \Im(\zeta) < 0
+        \end{cases}
+
+    where the argument :math:`\zeta` is a complex number representing the
+    phase velocity normalized by the thermal velocity, and where
+    :math:`x=\frac{v}{v_{th}}` is the velocity in the distribution function
+    normalized by the thermal velocity. The function has been
+    analytically continued from the upper half of the complex plane to the
+    lower half of the complex plane.
+
+    Parameters
+    ----------
+    zeetas : |array_like|
+        The real or complex value to be provided as an argument to the
+        plasma dispersion function. This is the ratio of the wave's phase
+        velocity to the thermal velocity.
         
+    dist : function
+        1D distribution function of the plasma velocity. The function should only
+        have one argument, which is the velocity in m/s. The function
+        should return probability density in units of velocity\ :sup:`-1`\ , 
+        normalized so that :math:`\int_{-∞}^{+∞} f(v) dv = 1`. When considering
+        an anisotropic distribution, dist should be the slice through the
+        distribution function which is aligned with the k-vector. The function
+        should be differentiable (analytic).
+
+    kWave : `~astropy.units.Quantity`
+        The corresponding wavenumber, in rad/m, of the electromagnetic
+        wave propagating through the plasma.
+
+    vth : `~astropy.units.Quantity`
+        The 3D, most probable thermal speed, in m/s. (i.e. it includes
+        the factor of :math:`\sqrt{2}`, see
+        :ref:`thermal speed notes <thermal-speed-notes>`)
+
+    wp : `~astropy.units.Quantity`
+        The plasma frequency, in rad/s.
+        
+    particle : `str`, optional
+        Representation of the particle species(e.g., ``'p+'`` for protons,
+        ``'D+'`` for deuterium, or ``'He-4 +1'`` for singly ionized
+        helium-4), which defaults to electrons.
+
+    Returns
+    -------
+    |array_like| or |Quantity|
+        The real or complex value of plasma dispersion function
+        evaluated at ``zeta``.
+
+    Raises
+    ------
+    ~astropy.units.UnitsError
+        If ``zeta`` is a |Quantity| but is not dimensionless.
+
+    See Also
+    --------
+    `~plasmapy.dispersion.dispersion_functions.plasma_dispersion_1D_dist`
+
+    Examples
+    --------
+    
+    """
+    dispersions = np.array([plasma_dispersion_1D_dist(
+        zeta=zeta,
+        dist=dist,
+        kWave=kWave,
+        vth=vth,
+        wp=wp,
+        particle=particle) for zeta in zetas])
+    return dispersions
+
 
 def plasma_dispersion_1D_dist_deriv(
     zeta: complex | np.ndarray | u.Quantity[u.dimensionless_unscaled],
@@ -645,5 +739,114 @@ def plasma_dispersion_1D_dist_deriv(
         # the residue for analytic continuation
         residue = np.pi * 2j * f_func(pole)
         total_integral = (integral + residue)
-        return total_integral
+        return total_integral * u.dimensionless_unscaled
 
+
+def plasma_dispersion_1D_dist_deriv_arr(
+    zetas: complex | np.ndarray | u.Quantity[u.dimensionless_unscaled],
+    dist: Callable[[float | u.Quantity[u.m / u.s]], float | u.Quantity[u.s / u.m]],
+    kWave: u.Quantity[u.rad / u.m],
+    vth: u.Quantity[u.m / u.s],
+    wp: u.Quantity[u.rad / u.s],
+    particle: ParticleLike = "e-",
+) -> complex | np.ndarray | u.Quantity[u.dimensionless_unscaled]:
+    r"""
+    Convenience function for passing an array of zetas to
+    plasma_dispersion_1D_dist_deriv.
+
+    The derivative of the plasma dispersion function is:
+
+    .. math::
+        Z'(ζ) = \frac{∂Z}{∂ζ}
+        
+    This results in (see eqs 9 and 15 in
+    https://arxiv.org/abs/1305.6476 and https://doi.org/10.1063/1.4822332):
+    .. math::
+        g'^{+}(\zeta) =
+        \begin{cases}
+            \frac{1}{\pi} \int_{-\infty}^{+\infty} \frac{\partial f(x) / \partial x}{x - \zeta} dx, \quad \Im(\zeta) > 0 \\
+            \frac{1}{\pi} PV\int_{-\infty}^{+\infty} \frac{\partial f(x) / \partial x}{x - \zeta} dx + if'(\zeta), \quad \Im(\zeta) = 0 \\
+            \frac{1}{\pi} \int_{-\infty}^{+\infty} \frac{\partial f(x) \partial x}{x - \zeta} dx + 2if'(\zeta), \quad \Im(\zeta) < 0
+        \end{cases}
+
+    where the argument :math:`\zeta` is a complex number representing the
+    phase velocity normalized by the thermal velocity, and where
+    :math:`x=\frac{v}{v_{th}}` is the velocity in the distribution function
+    normalized by the thermal velocity.
+    The function has been analytically continued from the upper half of the
+    complex plane to the lower half of the complex plane.
+    
+    The partial derivative of the distribution function is approximated through
+    a symmetric finite difference using the Compton shift as a physically
+    characteristic step size:
+        
+    .. math::
+        f'(x) = \frac{\partial f(x)}{\partial x} \approx \frac{f(x + \Delta x) - f(x - \Delta x)}{2 \Delta x}
+        
+    where the step size is the momentum due to the Compton shift, converted
+    into a velocity and then normalized by the thermal velocity:
+    
+    .. math::
+        \Delta x = \frac{\hbar k}{2 m v_{th}}
+        
+
+    Parameters
+    ----------
+    zeta : |Quantity|
+        The real or complex value to be provided as an argument to the
+        plasma dispersion function. This is the ratio of the wave's phase
+        velocity to the thermal velocity.
+        
+    dist : function
+        1D distribution function of the plasma velocity. The function should only
+        have one argument, which is the velocity in m/s. The function
+        should return probability density in units of velocity\ :sup:`-1`\ , 
+        normalized so that :math:`\int_{-∞}^{+∞} f(v) dv = 1`. When considering
+        an anisotropic distribution, dist should be the slice through the
+        distribution function which is aligned with the k-vector. The function
+        should be differentiable (analytic).
+    
+    kWave : `~astropy.units.Quantity`
+        The corresponding wavenumber, in rad/m, of the electromagnetic
+        wave propagating through the plasma.
+
+    vth : `~astropy.units.Quantity`
+        The 3D, most probable thermal speed, in m/s. (i.e. it includes
+        the factor of :math:`\sqrt{2}`, see
+        :ref:`thermal speed notes <thermal-speed-notes>`)
+
+    wp : `~astropy.units.Quantity`
+        The plasma frequency, in rad/s.
+        
+    particle : `str`, optional
+        Representation of the particle species(e.g., ``'p+'`` for protons,
+        ``'D+'`` for deuterium, or ``'He-4 +1'`` for singly ionized
+        helium-4), which defaults to electrons.
+
+    Returns
+    -------
+    complex, `~numpy.ndarray`, or |Quantity|
+        First derivative of plasma dispersion function.
+
+    Raises
+    ------
+    ~astropy.units.UnitsError
+        If the argument is a `~astropy.units.Quantity` but is not
+        dimensionless.
+
+    See Also
+    --------
+    `~plasmapy.dispersion.dispersion_functions.plasma_dispersion_1D_dist_deriv`
+
+    Examples
+    --------
+    
+    """
+    dispersions = np.array([plasma_dispersion_1D_dist_deriv(
+        zeta=zeta,
+        dist=dist,
+        kWave=kWave,
+        vth=vth,
+        wp=wp,
+        particle=particle) for zeta in zetas])
+    return dispersions
