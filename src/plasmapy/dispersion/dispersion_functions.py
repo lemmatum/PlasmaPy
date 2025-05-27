@@ -509,13 +509,21 @@ def plasma_dispersion_1D_dist_arr(
     --------
     
     """
-    dispersions = np.array([plasma_dispersion_1D_dist(
+    # flatten zetas to enable use of a list comprehension
+    zetas_shape = zetas.shape
+    zetas_flat = np.ravel(zetas)
+    
+    dispersions_flat = np.array([plasma_dispersion_1D_dist(
         zeta=zeta,
         dist=dist,
         kWave=kWave,
         vth=vth,
         wp=wp,
-        particle=particle) for zeta in zetas])
+        particle=particle) for zeta in zetas_flat])
+    
+    # reshape array of dispersion values back to same shape as the zetas array
+    dispersions = np.reshape(dispersions_flat, zetas_shape)
+    
     return dispersions
 
 
@@ -842,11 +850,19 @@ def plasma_dispersion_1D_dist_deriv_arr(
     --------
     
     """
-    dispersions = np.array([plasma_dispersion_1D_dist_deriv(
+    # flatten zetas to enable use of a list comprehension
+    zetas_shape = zetas.shape
+    zetas_flat = np.ravel(zetas)
+    
+    dispersions_flat = np.array([plasma_dispersion_1D_dist_deriv(
         zeta=zeta,
         dist=dist,
         kWave=kWave,
         vth=vth,
         wp=wp,
-        particle=particle) for zeta in zetas])
+        particle=particle) for zeta in zetas_flat])
+    
+    # reshape array of dispersion values back to same shape as the zetas array
+    dispersions = np.reshape(dispersions_flat, zetas_shape)
+    
     return dispersions
