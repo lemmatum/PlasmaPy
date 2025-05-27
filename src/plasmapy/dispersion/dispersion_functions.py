@@ -13,7 +13,6 @@ __all__ = ["plasma_dispersion_func",
 
 import astropy.units as u
 from astropy.constants.si import hbar
-from astropy.constants import c
 import numpy as np
 from scipy.special import wofz as faddeeva_function
 from scipy.integrate import quad
@@ -344,7 +343,7 @@ def plasma_dispersion_1D_dist(
         pole_pos = (pole + standoff).real
         # integral from -inf to pole
         neg_integral, neg_err = quad(func=g_func,
-                                     a=-c.value,
+                                     a=-np.inf,
                                      b=pole_neg,
                                      epsabs=1.49e-08,
                                      epsrel=1.49e-08,
@@ -359,7 +358,7 @@ def plasma_dispersion_1D_dist(
         # integral from pole to +inf
         pos_integral, pos_err = quad(func=g_func,
                                      a=pole_pos,
-                                     b=c.value,
+                                     b=np.inf,
                                      epsabs=1.49e-08,
                                      epsrel=1.49e-08,
                                      limit=50,
@@ -392,8 +391,8 @@ def plasma_dispersion_1D_dist(
     elif zeta.imag > 0:
         # analytic extension to the upper half of the complex plane (growth)
         integral, integral_err = quad(func=g_func,
-                                      a=-c.value,
-                                      b=c.value,
+                                      a=-np.inf,
+                                      b=np.inf,
                                       epsabs=1.49e-08,
                                       epsrel=1.49e-08,
                                       limit=50,
@@ -409,8 +408,8 @@ def plasma_dispersion_1D_dist(
     elif zeta.imag < 0:
         # analytic extension to the lower half of the complex plane (dampening)
         integral, integral_err = quad(func=g_func,
-                                      a=-c.value,
-                                      b=c.value,
+                                      a=-np.inf,
+                                      b=np.inf,
                                       epsabs=1.49e-08,
                                       epsrel=1.49e-08,
                                       limit=50,
@@ -667,7 +666,7 @@ def plasma_dispersion_1D_dist_deriv(
         pole_pos = (pole + standoff).real
         # integral from -inf to pole
         neg_integral, neg_err = quad(func=g_func,
-                                     a=-c.value,
+                                     a=-np.inf,
                                      b=pole_neg,
                                      epsabs=1.49e-08,
                                      epsrel=1.49e-08,
@@ -682,7 +681,7 @@ def plasma_dispersion_1D_dist_deriv(
         # integral from pole to +inf
         pos_integral, pos_err = quad(func=g_func,
                                      a=pole_pos,
-                                     b=c.value,
+                                     b=np.inf,
                                      epsabs=1.49e-08,
                                      epsrel=1.49e-08,
                                      limit=50,
@@ -715,8 +714,8 @@ def plasma_dispersion_1D_dist_deriv(
     elif zeta.imag > 0:
         # analytic extension to the upper half of the complex plane (growth)
         integral, integral_err = quad(func=g_func,
-                                      a=-c.value,
-                                      b=c.value,
+                                      a=-np.inf,
+                                      b=np.inf,
                                       epsabs=1.49e-08,
                                       epsrel=1.49e-08,
                                       limit=50,
@@ -732,8 +731,8 @@ def plasma_dispersion_1D_dist_deriv(
     elif zeta.imag < 0:
         # analytic extension to the lower half of the complex plane (dampening)
         integral, integral_err = quad(func=g_func,
-                                      a=-c.value,
-                                      b=c.value,
+                                      a=-np.inf,
+                                      b=np.inf,
                                       epsabs=1.49e-08,
                                       epsrel=1.49e-08,
                                       limit=50,
